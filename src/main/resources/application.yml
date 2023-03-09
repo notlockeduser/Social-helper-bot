@@ -1,0 +1,4 @@
+telegram:
+  bot:
+    username: SocialChannelHelperBot
+    token: some_token
