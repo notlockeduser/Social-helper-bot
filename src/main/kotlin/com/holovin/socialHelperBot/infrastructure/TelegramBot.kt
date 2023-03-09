@@ -5,6 +5,7 @@ import com.holovin.socialHelperBot.model.MediaType
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
 import org.telegram.telegrambots.bots.TelegramLongPollingBot
+import org.telegram.telegrambots.meta.api.methods.ForwardMessage
 import org.telegram.telegrambots.meta.api.methods.botapimethods.BotApiMethodMessage
 import org.telegram.telegrambots.meta.api.methods.send.SendMediaGroup
 import org.telegram.telegrambots.meta.api.methods.send.SendMessage
@@ -22,21 +23,35 @@ class TelegramBot(
     private val downloadService: DownloadService
 ) : TelegramLongPollingBot(properties.token) {
 
-
     override fun getBotUsername(): String = properties.username!!
-
 
     override fun onUpdateReceived(update: Update) {
         logger.info("Received message {}", update)
-        if (update.hasMessage() && update.message.hasText()) {
+        if (update.hasMessage()) {
             val chatId = update.message.chatId
 
-            when (val text = update.message.text) {
-                "/start" -> sendWelcomeMessage(chatId)
-                "/about" -> sendAboutMessage(chatId)
-                else -> sendMediaMessage(text, chatId)
+            if (update.message.hasVideo() || update.message.hasPhoto()) {
+                resendMediaFromTg(chatId, update)
+            }
+
+            if (update.message.hasText()) {
+                when (val text = update.message.text) {
+                    "/start" -> sendWelcomeMessage(chatId)
+                    "/about" -> sendAboutMessage(chatId)
+                    else -> processMessage(text, chatId)
+                }
             }
         }
+    }
+
+    private fun resendMediaFromTg(chatId: Long, update: Update) {
+        val forwardMessage = ForwardMessage(
+            chatId.toString(),
+            chatId.toString(),
+            update.message.messageId
+        )
+        forwardMessage.method
+        executeCommand(forwardMessage)
     }
 
     private fun sendWelcomeMessage(chatId: Long) {
@@ -53,7 +68,7 @@ class TelegramBot(
         executeCommand(sendMessage)
     }
 
-    private fun sendMediaMessage(text: String, chatId: Long) {
+    private fun processMessage(text: String, chatId: Long) {
         val media = downloadService.getStreamLinks(text)
         if (media.urls.size == 1) {
             val sendVideo = SendVideo()
@@ -63,18 +78,26 @@ class TelegramBot(
         } else {
             val sendMediaGroup = SendMediaGroup()
             sendMediaGroup.chatId = chatId.toString()
-            sendMediaGroup.medias = media.urls.map {
+            sendMediaGroup.medias = media.urls.mapIndexed { index, url ->
                 val inputMedia = if (media.type == MediaType.PHOTO) InputMediaPhoto() else InputMediaVideo()
-                inputMedia.setMedia(URL(it).openStream(), "file")
+                inputMedia.setMedia(URL(url).openStream(), index.toString())
                 inputMedia
             }
-            execute(sendMediaGroup)
+            executeCommand(sendMediaGroup)
         }
     }
 
     private fun executeCommand(message: BotApiMethodMessage) {
         try {
             execute(message)
+        } catch (e: TelegramApiException) {
+            e.printStackTrace()
+        }
+    }
+
+    private fun executeCommand(sendMediaGroup: SendMediaGroup) {
+        try {
+            execute(sendMediaGroup)
         } catch (e: TelegramApiException) {
             e.printStackTrace()
         }

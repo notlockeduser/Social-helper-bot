@@ -22,7 +22,7 @@ class DownloadServiceImpl : DownloadService {
         val jsonObject = gson.fromJson(jsonString, JsonObject::class.java)
         val dataJsonObject = jsonObject.getAsJsonObject("data")
         return if (dataJsonObject.has("images"))
-            Media(dataJsonObject.get("images").asJsonArray.asList().map { it.asString }, MediaType.PHOTO)
+            Media(dataJsonObject.getAsJsonArray("images").asList().map { it.asString }, MediaType.PHOTO)
         else Media(listOf(dataJsonObject.get("play").asString), MediaType.VIDEO)
     }
 
